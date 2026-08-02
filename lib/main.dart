@@ -1,7 +1,9 @@
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
-import 'dart:io';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   runApp(const MaxiDesignApp());
@@ -27,25 +29,53 @@ class MaxiDesignApp extends StatelessWidget {
 class MaxiItem {
   final String code;
   final String title;
-  final String imagePath; // وێنەی سەرەکی (کەڤەر) لە گالەرییەوە
-  final String dstFileName; // فایلی DST
+  final Uint8List imageBytes;
+  List<String> dstFileNames;
   final String price;
-  final String sleevePrice; // نرخی سەرقۆڵ
+  final String sleevePrice;
   final String designType;
   final String telegramLink;
-  List<String> extraImages; // وێنە زیاترەکان کە لە گالەری زیاد دەکرێن
+  List<Uint8List> extraImagesBytes;
 
   MaxiItem({
     required this.code,
     required this.title,
-    required this.imagePath,
-    required this.dstFileName,
+    required this.imageBytes,
+    required this.dstFileNames,
     required this.price,
     required this.sleevePrice,
     required this.designType,
     required this.telegramLink,
-    required this.extraImages,
+    required this.extraImagesBytes,
   });
+
+  // گۆڕینی داتا بۆ JSON بۆ ئەوەی لە SharedPreferences هەڵبگیرێت
+  Map<String, dynamic> toJson() => {
+        'code': code,
+        'title': title,
+        'imageBytes': base64Encode(imageBytes),
+        'dstFileNames': dstFileNames,
+        'price': price,
+        'sleevePrice': sleevePrice,
+        'designType': designType,
+        'telegramLink': telegramLink,
+        'extraImagesBytes': extraImagesBytes.map((img) => base64Encode(img)).toList(),
+      };
+
+  // هێنانەوەی داتا لە JSON
+  factory MaxiItem.fromJson(Map<String, dynamic> json) => MaxiItem(
+        code: json['code'],
+        title: json['title'],
+        imageBytes: base64Decode(json['imageBytes']),
+        dstFileNames: List<String>.from(json['dstFileNames']),
+        price: json['price'],
+        sleevePrice: json['sleevePrice'],
+        designType: json['designType'],
+        telegramLink: json['telegramLink'],
+        extraImagesBytes: (json['extraImagesBytes'] as List)
+            .map((img) => base64Decode(img))
+            .toList(),
+      );
 }
 
 class MaxiGalleryScreen extends StatefulWidget {
@@ -56,14 +86,33 @@ class MaxiGalleryScreen extends StatefulWidget {
 }
 
 class _MaxiGalleryScreenState extends State<MaxiGalleryScreen> {
-  final List<MaxiItem> _allMaxis = [];
+  List<MaxiItem> _allMaxis = [];
   List<MaxiItem> _filteredMaxis = [];
   final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _filteredMaxis = _allMaxis;
+    _loadDataFromLocal(); // هێنانەوەی داتاکان کاتێک ئەپەکە دەکرێتەوە
+  }
+
+  // پاشەکەوتکردنی داتاکان لە SharedPreferences
+  Future<void> _saveDataToLocal() async {
+    final prefs = await SharedPreferences.getInstance();
+    List<String> encodedList = _allMaxis.map((item) => jsonEncode(item.toJson())).toList();
+    await prefs.setStringList('maxi_designs', encodedList);
+  }
+
+  // خوێندنەوەی داتاکان لە SharedPreferences
+  Future<void> _loadDataFromLocal() async {
+    final prefs = await SharedPreferences.getInstance();
+    List<String>? encodedList = prefs.getStringList('maxi_designs');
+    if (encodedList != null) {
+      setState(() {
+        _allMaxis = encodedList.map((item) => MaxiItem.fromJson(jsonDecode(item))).toList();
+        _filteredMaxis = _allMaxis;
+      });
+    }
   }
 
   void _runSearch(String keyword) {
@@ -86,22 +135,24 @@ class _MaxiGalleryScreenState extends State<MaxiGalleryScreen> {
     return 'A-$nextNumber';
   }
 
-  // کردنەوەی گالەری بۆ هەڵبژاردنی وێنە
-  Future<String?> _pickImageFromGallery() async {
+  Future<Uint8List?> _pickImageBytes() async {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
-    return image?.path;
-  }
-
-  // کردنەوەی فایل مەنەجەر بۆ هەڵبژاردنی فایلی DST
-  Future<String?> _pickDstFile() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.any,
-    );
-    if (result != null) {
-      return result.files.single.name;
+    if (image != null) {
+      return await image.readAsBytes();
     }
     return null;
+  }
+
+  Future<List<String>> _pickMultipleDstFiles() async {
+    FilePickerResult? result = await FilePicker.platform.pickFiles(
+      type: FileType.any,
+      allowMultiple: true,
+    );
+    if (result != null) {
+      return result.files.map((file) => file.name).toList();
+    }
+    return [];
   }
 
   void _showAddDialog() {
@@ -111,8 +162,8 @@ class _MaxiGalleryScreenState extends State<MaxiGalleryScreen> {
     final sleevePriceController = TextEditingController();
     final telegramController = TextEditingController();
     
-    String? selectedImagePath;
-    String? selectedDstFile;
+    Uint8List? selectedImageBytes;
+    List<String> selectedDstFiles = [];
     String selectedType = 'بەژنە';
 
     final List<String> types = [
@@ -164,29 +215,33 @@ class _MaxiGalleryScreenState extends State<MaxiGalleryScreen> {
                     const SizedBox(height: 15),
                     ElevatedButton.icon(
                       onPressed: () async {
-                        String? path = await _pickImageFromGallery();
-                        if (path != null) {
+                        Uint8List? bytes = await _pickImageBytes();
+                        if (bytes != null) {
                           dialogSetState(() {
-                            selectedImagePath = path;
+                            selectedImageBytes = bytes;
                           });
                         }
                       },
                       icon: const Icon(Icons.image),
-                      label: Text(selectedImagePath == null ? 'هەڵبژاردنی وێنەی کەڤەر لە گالەری' : 'وێنە هەڵبژێردرا ✅'),
+                      label: Text(selectedImageBytes == null ? 'هەڵبژاردنی وێنەی کەڤەر لە گالەری' : 'وێنە هەڵبژێردرا ✅'),
                     ),
                     const SizedBox(height: 10),
                     ElevatedButton.icon(
                       onPressed: () async {
-                        String? fileName = await _pickDstFile();
-                        if (fileName != null) {
+                        List<String> files = await _pickMultipleDstFiles();
+                        if (files.isNotEmpty) {
                           dialogSetState(() {
-                            selectedDstFile = fileName;
+                            selectedDstFiles.addAll(files);
                           });
                         }
                       },
                       icon: const Icon(Icons.insert_drive_file),
-                      label: Text(selectedDstFile == null ? 'هەڵبژاردنی فایلی نەخش (DST)' : 'فایل هەڵبژێردرا: $selectedDstFile'),
+                      label: Text(selectedDstFiles.isEmpty ? 'هەڵبژاردنی فایلی نەخش (DST)' : 'فایل هەڵبژێردرا (${selectedDstFiles.length})'),
                     ),
+                    if (selectedDstFiles.isNotEmpty) ...[
+                      const SizedBox(height: 5),
+                      Text('فایلەکان: ${selectedDstFiles.join(", ")}', style: const TextStyle(fontSize: 11, color: Colors.blue), maxLines: 2),
+                    ],
                     const SizedBox(height: 10),
                     DropdownButtonFormField<String>(
                       value: selectedType,
@@ -204,21 +259,22 @@ class _MaxiGalleryScreenState extends State<MaxiGalleryScreen> {
                 ),
                 ElevatedButton(
                   onPressed: () {
-                    if (titleController.text.isNotEmpty && selectedImagePath != null) {
+                    if (titleController.text.isNotEmpty && selectedImageBytes != null) {
                       setState(() {
                         _allMaxis.add(MaxiItem(
                           code: generatedCode,
                           title: titleController.text,
-                          imagePath: selectedImagePath!,
-                          dstFileName: selectedDstFile ?? '${generatedCode}.dst',
+                          imageBytes: selectedImageBytes!,
+                          dstFileNames: selectedDstFiles.isNotEmpty ? selectedDstFiles : ['$generatedCode.dst'],
                           price: priceController.text.isNotEmpty ? priceController.text : '0',
                           sleevePrice: sleevePriceController.text.isNotEmpty ? sleevePriceController.text : '0',
                           designType: selectedType,
                           telegramLink: telegramController.text,
-                          extraImages: [],
+                          extraImagesBytes: [],
                         ));
                         _filteredMaxis = _allMaxis;
                       });
+                      _saveDataToLocal(); // پاشەکەوتکردنی ڕاستەوخۆ دوای زیادکردن
                       Navigator.pop(context);
                     }
                   },
@@ -277,7 +333,10 @@ class _MaxiGalleryScreenState extends State<MaxiGalleryScreen> {
                               MaterialPageRoute(
                                 builder: (context) => MaxiDetailScreen(
                                   maxiItem: maxi,
-                                  onUpdate: () => setState(() {}),
+                                  onUpdate: () {
+                                    setState(() {});
+                                    _saveDataToLocal(); // نوێکردنەوەی پاشەکەوت ئەگەر گۆڕانکاری کرا
+                                  },
                                 ),
                               ),
                             );
@@ -295,8 +354,8 @@ class _MaxiGalleryScreenState extends State<MaxiGalleryScreen> {
                                     borderRadius: const BorderRadius.vertical(
                                       top: Radius.circular(15),
                                     ),
-                                    child: Image.file(
-                                      File(maxi.imagePath),
+                                    child: Image.memory(
+                                      maxi.imageBytes,
                                       fit: BoxFit.cover,
                                     ),
                                   ),
@@ -354,7 +413,6 @@ class _MaxiGalleryScreenState extends State<MaxiGalleryScreen> {
   }
 }
 
-// شاشەی وردەکارییەکان
 class MaxiDetailScreen extends StatefulWidget {
   const MaxiDetailScreen({super.key, required this.maxiItem, required this.onUpdate});
 
@@ -367,20 +425,19 @@ class MaxiDetailScreen extends StatefulWidget {
 
 class _MaxiDetailScreenState extends State<MaxiDetailScreen> {
   
-  // زیادکردنی وێنەی زیاتر لە گالەرییەوە
   Future<void> _addExtraImage() async {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
     if (image != null) {
+      var bytes = await image.readAsBytes();
       setState(() {
-        widget.maxiItem.extraImages.add(image.path);
+        widget.maxiItem.extraImagesBytes.add(bytes);
       });
       widget.onUpdate();
     }
   }
 
-  // پیشاندانی وێنە بە گەورەیی کاتێک دەپەنجە دەنێیت بەسەریدا
-  void _showFullscreenImage(String imagePath) {
+  void _showFullscreenImage(Uint8List imageBytes) {
     showDialog(
       context: context,
       builder: (context) => Dialog(
@@ -390,7 +447,7 @@ class _MaxiDetailScreenState extends State<MaxiDetailScreen> {
           children: [
             Center(
               child: InteractiveViewer(
-                child: Image.file(File(imagePath)),
+                child: Image.memory(imageBytes),
               ),
             ),
             IconButton(
@@ -415,14 +472,13 @@ class _MaxiDetailScreenState extends State<MaxiDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // وێنەی سەرەکی کەڤەر (بە گەورەکردن)
             Center(
               child: GestureDetector(
-                onTap: () => _showFullscreenImage(widget.maxiItem.imagePath),
+                onTap: () => _showFullscreenImage(widget.maxiItem.imageBytes),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(15),
-                  child: Image.file(
-                    File(widget.maxiItem.imagePath),
+                  child: Image.memory(
+                    widget.maxiItem.imageBytes,
                     height: 250,
                     width: double.infinity,
                     fit: BoxFit.cover,
@@ -459,13 +515,13 @@ class _MaxiDetailScreenState extends State<MaxiDetailScreen> {
               ],
             ),
             const Divider(height: 30),
-            // فایلی DST
             const Text(
               'فایلی دیزاینی DST:',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            Container(
+            ...widget.maxiItem.dstFileNames.map((fileName) => Container(
+              margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: Colors.blue[50],
@@ -478,7 +534,7 @@ class _MaxiDetailScreenState extends State<MaxiDetailScreen> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      widget.maxiItem.dstFileName,
+                      fileName,
                       style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
                     ),
                   ),
@@ -489,9 +545,8 @@ class _MaxiDetailScreenState extends State<MaxiDetailScreen> {
                   ),
                 ],
               ),
-            ),
+            )),
             const SizedBox(height: 20),
-            // بەشی وێنەی زیاتر بە شێوازی ئاسۆیی و دوگمەی زیادکردن
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -509,19 +564,19 @@ class _MaxiDetailScreenState extends State<MaxiDetailScreen> {
             const SizedBox(height: 10),
             SizedBox(
               height: 130,
-              child: widget.maxiItem.extraImages.isNotEmpty
+              child: widget.maxiItem.extraImagesBytes.isNotEmpty
                   ? ListView.builder(
                       scrollDirection: Axis.horizontal,
-                      itemCount: widget.maxiItem.extraImages.length,
+                      itemCount: widget.maxiItem.extraImagesBytes.length,
                       itemBuilder: (context, index) {
                         return Padding(
                           padding: const EdgeInsets.only(right: 10),
                           child: GestureDetector(
-                            onTap: () => _showFullscreenImage(widget.maxiItem.extraImages[index]),
+                            onTap: () => _showFullscreenImage(widget.maxiItem.extraImagesBytes[index]),
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(10),
-                              child: Image.file(
-                                File(widget.maxiItem.extraImages[index]),
+                              child: Image.memory(
+                                widget.maxiItem.extraImagesBytes[index],
                                 width: 110,
                                 fit: BoxFit.cover,
                               ),
