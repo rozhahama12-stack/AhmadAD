@@ -1,4 +1,4 @@
-name: maxi_app
+name: ad_design
 description: "A new Flutter project."
 publish_to: 'none'
 
@@ -10,9 +10,11 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  universal_html: ^2.2.4
+  firebase_core: ^2.27.0
+  cloud_firestore: ^4.15.5
   image_picker: ^1.0.7
-  file_picker: ^8.0.0
-  shared_preferences: ^2.2.3
+  file_picker: ^6.1.1
 
 
 dev_dependencies:
