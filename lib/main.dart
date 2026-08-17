@@ -614,7 +614,7 @@ class _MaxiGalleryScreenState extends State<MaxiGalleryScreen> {
                   crossAxisCount: 2,
                   crossAxisSpacing: 12,
                   mainAxisSpacing: 12,
-                  childAspectRatio: 0.62,
+                  childAspectRatio: 0.82,
                 ),
                 itemBuilder: (context, index) {
                   final maxi = filteredItems[index];
@@ -663,48 +663,54 @@ class _MaxiGalleryScreenState extends State<MaxiGalleryScreen> {
                               ],
                             ),
                           ),
-                          Padding(
-                            padding: const EdgeInsets.all(8.0),
+                          Container(
+                            padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
                               children: [
-                                Text(
-                                  'A${maxi.codeNumber}',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.pink, fontSize: 13),
-                                ),
-                                Text(
-                                  maxi.title,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(fontSize: 11),
-                                ),
-                                const SizedBox(height: 4),
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Text('${maxi.price} د.ع', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 11)),
-                                    Text(maxi.neckType, style: const TextStyle(fontSize: 9, color: Colors.grey)),
+                                    Text(
+                                      'A${maxi.codeNumber}',
+                                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.pink, fontSize: 12),
+                                    ),
+                                    Text(
+                                      '${maxi.price} د.ع',
+                                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 11),
+                                    ),
                                   ],
                                 ),
-                                if (_isAdmin)
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.end,
-                                    children: [
-                                      IconButton(
-                                        constraints: const BoxConstraints(),
-                                        padding: const EdgeInsets.all(2),
-                                        icon: const Icon(Icons.edit, color: Colors.blue, size: 18),
-                                        onPressed: () => _editDesign(maxi),
+                                const SizedBox(height: 2),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        maxi.designStyle,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(fontSize: 10, color: Colors.purple, fontWeight: FontWeight.w600),
                                       ),
-                                      const SizedBox(width: 8),
-                                      IconButton(
-                                        constraints: const BoxConstraints(),
-                                        padding: const EdgeInsets.all(2),
-                                        icon: const Icon(Icons.delete, color: Colors.red, size: 18),
-                                        onPressed: () => _deleteDesign(maxi.id),
+                                    ),
+                                    if (_isAdmin)
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          InkWell(
+                                            onTap: () => _editDesign(maxi),
+                                            child: const Icon(Icons.edit, color: Colors.blue, size: 16),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          InkWell(
+                                            onTap: () => _deleteDesign(maxi.id),
+                                            child: const Icon(Icons.delete, color: Colors.red, size: 16),
+                                          ),
+                                        ],
                                       ),
-                                    ],
-                                  ),
+                                  ],
+                                ),
                               ],
                             ),
                           ),
@@ -851,7 +857,7 @@ class _MaxiDetailScreenState extends State<MaxiDetailScreen> {
               style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
               onPressed: _openTelegramLink,
               icon: const Icon(Icons.send),
-              label: const Text('پەیوەندیکردن لە تێلیگرام'),
+              label: const Text('پەیوەندیکردن بۆ کڕین یان پرسیار'),
             ),
             const SizedBox(height: 15),
             TextField(
@@ -967,7 +973,7 @@ class _MaxiDetailScreenState extends State<MaxiDetailScreen> {
                       Icon(Icons.send, color: Colors.blue, size: 20),
                       SizedBox(width: 8),
                       Text(
-                        'پەیوەندیکردن لە تێلیگرام بۆ کڕین یان پرسیار',
+                        'پەیوەندی کردن بۆ کڕین یان پرسیار',
                         style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 13),
                       ),
                     ],
