@@ -1,0 +1,23 @@
+name: Upload File from Flutter
+
+on:
+  repository_dispatch:
+    types: [upload-file]
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Create and push file
+        run: |
+          echo "${{ github.event.client_payload.content }}" | base64 --decode > "${{ github.event.client_payload.path }}"
+          git config --global user.name "Flutter Bot"
+          git config --global user.email "bot@flutter.com"
+          git add "${{ github.event.client_payload.path }}"
+          git commit -m "${{ github.event.client_payload.message }}"
+          git push origin main
+        env:
+          GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
